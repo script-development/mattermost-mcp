@@ -63,6 +63,7 @@ Restart the session after editing `.mcp.json` for the server to be picked up.
 | `list_channels` | Channels you belong to in a team |
 | `search_channels` | Find channels by term (returns slugs) |
 | `get_user` | Look up a user by @username or ID |
+| `search_users` | Find people by partial name, nickname, or email |
 | `get_channel_posts` | Read recent posts in a channel |
 | `get_thread` | Read a full thread from any post in it |
 | `search_posts` | Full-text search within a team |

@@ -14,6 +14,7 @@ import {
     type MMPost,
     type MMPostList,
     type MMTeam,
+    type MMUser,
 } from './client.js';
 
 /**
@@ -118,6 +119,38 @@ export function buildServer(): McpServer {
             inputSchema: {user: z.string().describe('Username (without @) or user ID')},
         },
         async ({user}) => run(() => resolveUser(user)),
+    );
+
+    server.registerTool(
+        'search_users',
+        {
+            title: 'Search for people',
+            description:
+                "Search for people by a partial name, username, nickname, or email — for when you don't know someone's exact username. Returns matching users with usernames and IDs. Optionally scope to one team's members.",
+            inputSchema: {
+                term: z.string().describe('Search term: part of a name, username, nickname, or email'),
+                team: z
+                    .string()
+                    .optional()
+                    .describe("Optional team (URL slug or ID) to limit results to that team's members"),
+                limit: z.number().int().min(1).max(100).optional().describe('Max results (default 20, max 100)'),
+            },
+        },
+        async ({term, team, limit}) =>
+            run(async () => {
+                const teamId = team ? await resolveTeamId(team) : undefined;
+                const users = await mm<MMUser[]>('POST', '/users/search', {
+                    body: {term, team_id: teamId, limit: limit ?? 20},
+                });
+                return users.map((u) => ({
+                    id: u.id,
+                    username: u.username,
+                    name: [u.first_name, u.last_name].filter(Boolean).join(' '),
+                    nickname: u.nickname ?? '',
+                    position: u.position ?? '',
+                    email: u.email ?? '',
+                }));
+            }),
     );
 
     // ── reading ───────────────────────────────────────────────────────────
