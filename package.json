@@ -1,0 +1,35 @@
+{
+    "name": "mattermost-mcp",
+    "version": "0.1.0",
+    "private": true,
+    "description": "An MCP server that drives a Mattermost server as the authenticated user, via a Personal Access Token.",
+    "bin": {
+        "mattermost-mcp": "dist/index.js"
+    },
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsx watch --env-file=.env src/index.ts",
+        "format": "oxfmt --write .",
+        "format:check": "oxfmt --check .",
+        "handshake": "tsx --env-file=.env test/handshake.ts",
+        "lint": "oxlint .",
+        "smoke": "tsx --env-file=.env test/smoke.ts",
+        "start": "node --env-file=.env dist/index.js",
+        "typecheck": "tsc -p tsconfig.check.json"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.12.0",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "oxfmt": "^0.54.0",
+        "oxlint": "^1.70.0",
+        "tsx": "^4.19.2",
+        "typescript": "^6.0.3"
+    },
+    "engines": {
+        "node": ">=24"
+    }
+}

@@ -1,0 +1,9 @@
+{
+    // Type-check only (no emit) across BOTH src and test. The base tsconfig.json
+    // drives the build and scopes itself to src/** (rootDir src → dist), so it
+    // never type-checks the tsx smoke script. This config closes that gap: same
+    // strict settings, widened to test/**, emitting nothing.
+    "extends": "./tsconfig.json",
+    "compilerOptions": {"noEmit": true, "rootDir": "."},
+    "include": ["src/**/*.ts", "test/**/*.ts"]
+}

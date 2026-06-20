@@ -1,0 +1,7 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript", "unicorn", "oxc"],
+    "categories": {"correctness": "error"},
+    "rules": {"no-implied-eval": "error", "prefer-regex-literals": "error", "getter-return": "error"},
+    "env": {"builtin": true}
+}
