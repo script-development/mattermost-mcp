@@ -1,0 +1,11 @@
+# Code owners for mattermost-mcp.
+#
+# Branch protection on `main` requires a code-owner review on every PR
+# (require_code_owner_reviews). Since an author cannot approve their own PR,
+# this means a second owner reviews — listing two owners means EITHER owner's
+# approval satisfies the requirement. enforce_admins is OFF, so an admin can
+# still merge directly when no reviewer is available.
+#
+# Owners must be collaborators with write/admin.
+
+* @Goosterhof @jasperboerhof
