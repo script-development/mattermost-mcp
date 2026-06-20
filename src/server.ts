@@ -5,6 +5,8 @@ import {
     downloadFile,
     flattenPosts,
     getMe,
+    getRecentActivity,
+    looksLikeId,
     mm,
     resolveChannelId,
     resolveTeamId,
@@ -209,6 +211,70 @@ export function buildServer(): McpServer {
                     body: {terms, is_or_search: Boolean(or_search)},
                 });
                 return flattenPosts(list);
+            }),
+    );
+
+    server.registerTool(
+        'get_recent_activity',
+        {
+            title: 'Catch up on recent activity',
+            description:
+                "Catch up on what happened recently — recent messages grouped by conversation, newest-active first, within the last N hours (default 4). By default scans all your DMs and group messages; add `channels` to also include specific channels, or set include_channels to sweep every channel you belong to. This is the 'what did I miss' tool.",
+            inputSchema: {
+                hours: z.number().min(0.25).max(168).optional().describe('Look back this many hours (default 4)'),
+                team: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Limit the scan to one team (URL slug or ID); also resolves `channels` slugs. Default: all your teams.',
+                    ),
+                channels: z
+                    .array(z.string())
+                    .optional()
+                    .describe(
+                        'Specific channels to include on top of your DMs (URL slugs — needs `team` — or 26-char IDs).',
+                    ),
+                include_dms: z.boolean().optional().describe('Include direct & group messages (default true)'),
+                include_channels: z
+                    .boolean()
+                    .optional()
+                    .describe(
+                        'Sweep every regular channel you belong to (default false; ignored when `channels` is given)',
+                    ),
+                per_channel: z
+                    .number()
+                    .int()
+                    .min(1)
+                    .max(200)
+                    .optional()
+                    .describe('Max messages returned per conversation (default 50)'),
+            },
+        },
+        async (args) =>
+            run(async () => {
+                const hours = args.hours ?? 4;
+                const sinceMs = Date.now() - hours * 3_600_000;
+
+                const teamIds = args.team ? [await resolveTeamId(args.team)] : undefined;
+                const onlyChannelIds =
+                    args.channels && args.channels.length > 0
+                        ? await Promise.all(
+                              args.channels.map((c) =>
+                                  resolveChannelId(looksLikeId(c) ? {channel_id: c} : {team: args.team, channel: c}),
+                              ),
+                          )
+                        : undefined;
+
+                const activity = await getRecentActivity({
+                    sinceMs,
+                    teamIds,
+                    onlyChannelIds,
+                    includeDms: args.include_dms ?? true,
+                    includeChannels: args.include_channels ?? false,
+                    perChannel: args.per_channel,
+                });
+
+                return {since: new Date(sinceMs).toISOString(), hours, conversations: activity.length, activity};
             }),
     );
 
