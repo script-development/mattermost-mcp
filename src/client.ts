@@ -41,6 +41,7 @@ export interface MMChannel {
     type: string;
     purpose?: string;
     team_id?: string;
+    last_post_at?: number;
 }
 
 export interface MMPost {
@@ -184,6 +185,105 @@ export async function flattenPosts(list: MMPostList): Promise<FlatPost[]> {
             },
         ];
     });
+}
+
+// ── activity digest ───────────────────────────────────────────────────────────
+
+export interface ChannelActivity {
+    channel: string; // human-friendly label (DM → @other, else display name)
+    channel_id: string;
+    type: string; // public | private | direct | group
+    last_post_at: string; // ISO of the channel's most recent post
+    count: number; // posts in the window (may exceed `posts.length` if capped)
+    posts: FlatPost[];
+}
+
+const channelKind = (type: string): string =>
+    type === 'O' ? 'public' : type === 'P' ? 'private' : type === 'D' ? 'direct' : type === 'G' ? 'group' : type;
+
+/** Human label for a channel — DM → "@other", GM → display, else display/name. */
+async function labelChannel(channel: MMChannel, meId: string, dmNames: Map<string, string>): Promise<string> {
+    if (channel.type === 'D') {
+        const otherId = channel.name.split('__').find((id) => id !== meId) ?? meId;
+        let username = dmNames.get(otherId);
+        if (!username) {
+            username = (await resolveUser(otherId)).username;
+            dmNames.set(otherId, username);
+        }
+        return `@${username}`;
+    }
+    if (channel.type === 'G') return channel.display_name || 'group message';
+    return channel.display_name || channel.name;
+}
+
+/**
+ * Catch-up digest: find conversations with activity since `sinceMs` and return
+ * their recent messages grouped by channel, newest-active first. Cheap by
+ * design — one channel-list call per team yields every channel's `last_post_at`,
+ * so only channels actually active in the window incur a posts fetch. DM
+ * channels are labelled with the other participant's @username.
+ */
+export async function getRecentActivity(opts: {
+    sinceMs: number;
+    teamIds?: string[];
+    includeDms?: boolean;
+    includeChannels?: boolean;
+    onlyChannelIds?: string[];
+    perChannel?: number;
+}): Promise<ChannelActivity[]> {
+    const me = await getMe();
+    const includeDms = opts.includeDms ?? true;
+    const includeChannels = opts.includeChannels ?? false;
+    const perChannel = opts.perChannel ?? 50;
+    const teamIds = opts.teamIds ?? (await mm<MMTeam[]>('GET', '/users/me/teams')).map((t) => t.id);
+
+    // Every channel the user belongs to (DMs/GMs included), deduped across teams.
+    const byId = new Map<string, MMChannel>();
+    for (const teamId of teamIds) {
+        const channels = await mm<MMChannel[]>('GET', `/users/${me.id}/teams/${teamId}/channels`);
+        for (const channel of channels) byId.set(channel.id, channel);
+    }
+
+    // Selection: explicit channels (if given) stand in for the regular-channel
+    // set; DMs/GMs are layered on top whenever includeDms is set.
+    const selected = new Map<string, MMChannel>();
+    if (opts.onlyChannelIds && opts.onlyChannelIds.length > 0) {
+        for (const id of opts.onlyChannelIds) {
+            const channel = byId.get(id) ?? (await mm<MMChannel>('GET', `/channels/${id}`));
+            selected.set(channel.id, channel);
+        }
+    } else if (includeChannels) {
+        for (const channel of byId.values()) {
+            if (channel.type === 'O' || channel.type === 'P') selected.set(channel.id, channel);
+        }
+    }
+    if (includeDms) {
+        for (const channel of byId.values()) {
+            if (channel.type === 'D' || channel.type === 'G') selected.set(channel.id, channel);
+        }
+    }
+
+    // Only channels active within the window, most-recently-active first.
+    const active = [...selected.values()]
+        .filter((channel) => (channel.last_post_at ?? 0) >= opts.sinceMs)
+        .sort((a, b) => (b.last_post_at ?? 0) - (a.last_post_at ?? 0));
+
+    const dmNames = new Map<string, string>(); // userId → username, for DM labels
+    const digest: ChannelActivity[] = [];
+    for (const channel of active) {
+        const list = await mm<MMPostList>('GET', `/channels/${channel.id}/posts`, {query: {since: opts.sinceMs}});
+        const posts = await flattenPosts(list);
+        if (posts.length === 0) continue;
+        digest.push({
+            channel: await labelChannel(channel, me.id, dmNames),
+            channel_id: channel.id,
+            type: channelKind(channel.type),
+            last_post_at: new Date(channel.last_post_at ?? 0).toISOString(),
+            count: posts.length,
+            posts: posts.slice(-perChannel),
+        });
+    }
+    return digest;
 }
 
 // ── files ───────────────────────────────────────────────────────────────────
